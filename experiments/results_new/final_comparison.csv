@@ -1,0 +1,7 @@
+attack,breach_rate_%
+SIA,34.17
+SI_NI_FGSM,31.46
+MI_FGSM,26.04
+MI_ADMIX_DI_TI,23.96
+TI_FGSM,20.0
+PGD,16.46

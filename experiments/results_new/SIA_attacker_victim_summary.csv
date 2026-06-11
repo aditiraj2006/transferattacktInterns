@@ -1,0 +1,9 @@
+attack,attacker_model,victim_model,total,breaches,breach_rate
+SIA,ArcFace,Facenet,30,0,0.0
+SIA,ArcFace,Facenet512,30,13,43.33
+SIA,ArcFace,VGG-Face,30,13,43.33
+SIA,Facenet512,ArcFace,30,15,50.0
+SIA,Facenet512,VGG-Face,30,13,43.33
+SIA,VGG-Face,ArcFace,30,15,50.0
+SIA,VGG-Face,Facenet,30,0,0.0
+SIA,VGG-Face,Facenet512,30,13,43.33

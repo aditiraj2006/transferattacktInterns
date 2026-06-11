@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+venv311/
+tmp/
+arcface_weights.h5
+dataset_extractedfaces/
