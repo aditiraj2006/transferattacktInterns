@@ -9,7 +9,12 @@ Included baseline attacks:
 - SI-NI-FGSM
 - MI-ADMIX-DI-TI
 
+Verified student-contributed attacks now included:
+- BPA_CNN
+- BSR
+- DECOWA
+- SIA_MI_TI
+
 Not included:
 - extra objective-level modifications from other project branches
 - API-specific evaluation code paths
-
