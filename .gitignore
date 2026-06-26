@@ -6,3 +6,12 @@ venv311/
 tmp/
 arcface_weights.h5
 dataset_extractedfaces/
+# Generated evaluation outputs
+test_sia_check/
+pgd_eval/
+mifgsm_eval/
+tifgsm_eval/
+experiments/results_new_new/
+
+# Large local model weights
+ir152.pth
