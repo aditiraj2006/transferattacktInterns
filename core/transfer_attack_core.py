@@ -29,6 +29,7 @@ ALL_ATTACKS = [
     'BSR',
     'DECOWA',
     'SIA_MI_TI',
+    'SIA',
 ]
 
 ATTACK_COLS = {
@@ -41,6 +42,7 @@ ATTACK_COLS = {
     'BSR': 'bsr_path',
     'DECOWA': 'decowa_path',
     'SIA_MI_TI': 'sia_mi_ti_path',
+    'SIA': 'sia_path',
 }
 
 EPSILON = 0.062
@@ -598,6 +600,89 @@ def sia_block_transform(x_val, num_block=3):
     return tf.concat(rows, axis=1)
 
 
+def structure_invariant_transform(image_tf, grid=4):
+    image_np = image_tf.numpy()[0]
+    H, W = image_np.shape[:2]
+    bH, bW = H // grid, W // grid
+    out = image_np.copy()
+
+    for row in range(grid):
+        for col in range(grid):
+            r0 = row * bH
+            r1 = (row + 1) * bH if row < grid - 1 else H
+            c0 = col * bW
+            c1 = (col + 1) * bW if col < grid - 1 else W
+            block = image_np[r0:r1, c0:c1, :]
+            tid = np.random.randint(0, 10)
+            transformed = _transform_block(block, tid)
+            if transformed.shape != block.shape:
+                transformed = tf.image.resize(
+                    transformed[np.newaxis], [r1 - r0, c1 - c0]
+                ).numpy()[0]
+            out[r0:r1, c0:c1, :] = transformed
+
+    return tf.constant(out[np.newaxis], dtype=tf.float32)
+
+
+def _transform_block(block, tid):
+    H, W = block.shape[:2]
+    if tid == 0:
+        return block
+    if tid == 1:
+        return block[:, ::-1, :]
+    if tid == 2:
+        nh, nw = max(1, int(H * 0.8)), max(1, int(W * 0.8))
+        small = tf.image.resize(block[np.newaxis], [nh, nw]).numpy()[0]
+        out = np.zeros_like(block)
+        ph, pw = (H - nh) // 2, (W - nw) // 2
+        out[ph:ph + nh, pw:pw + nw] = small
+        return out
+    if tid == 3:
+        grey = np.mean(block, axis=2, keepdims=True)
+        return np.broadcast_to(grey, block.shape).copy()
+    if tid == 4:
+        return np.clip(block * 1.3 - 0.15, -1.0, 1.0)
+    if tid == 5:
+        return np.clip(block + 0.1, -1.0, 1.0)
+    if tid == 6:
+        return block[::-1, :, :]
+    if tid == 7:
+        return np.rot90(block, k=1)
+    if tid == 8:
+        return np.rot90(block, k=2)
+    if tid == 9:
+        return np.rot90(block, k=3)
+    return block
+
+
+def sia_attack(model, x, tgt_emb, attack_type, num_copies=20, grid=4, eps=EPSILON, steps=NUM_ITER, decay=DECAY):
+    adv = tf.identity(x)
+    momentum = tf.zeros_like(x)
+    alpha = eps / steps
+    tgt_emb = tf.nn.l2_normalize(tgt_emb, axis=1)
+
+    for _ in range(steps):
+        grad_accum = tf.zeros_like(adv)
+
+        for _ in range(num_copies):
+            transformed = structure_invariant_transform(adv, grid=grid)
+            with tf.GradientTape() as tape:
+                tape.watch(transformed)
+                emb = compute_embedding(model, transformed)
+                cos = tf.reduce_sum(emb * tgt_emb, axis=1)
+                loss = attack_loss(cos, attack_type)
+            grad = tape.gradient(loss, transformed)
+            grad_accum += grad / num_copies
+
+        grad_norm = grad_accum / (tf.reduce_mean(tf.abs(grad_accum)) + 1e-8)
+        momentum = decay * momentum + grad_norm
+        adv = adv + alpha * tf.sign(momentum)
+        adv = tf.clip_by_value(adv, x - eps, x + eps)
+        adv = tf.clip_by_value(adv, -1.0, 1.0)
+
+    return adv
+
+
 # Student-contributed attack integration:
 # SIA_MI_TI by Janhavi Kishor
 # Paper basis: Structure Invariant Transformation for better Adversarial Transferability
@@ -626,10 +711,9 @@ def sia_mi_ti(model, x, tgt_emb, attack_type, num_copies=5, num_block=3):
         adv = tf.clip_by_value(adv, x - EPSILON, x + EPSILON)
         adv = tf.clip_by_value(adv, -1.0, 1.0)
     return adv
-
-
 def build_attacker(model_name: str):
-    return DeepFace.build_model(model_name).model
+    model = DeepFace.build_model(model_name)
+    return model.model if hasattr(model, "model") else model
 
 
 def run_attack(attack_name: str, model, src, tgt, attack_type: str, input_size):
@@ -653,4 +737,6 @@ def run_attack(attack_name: str, model, src, tgt, attack_type: str, input_size):
         return decowa(model, src, tgt_emb, attack_type, input_size)
     if attack_name == 'SIA_MI_TI':
         return sia_mi_ti(model, src, tgt_emb, attack_type)
+    if attack_name == 'SIA':
+        return sia_attack(model, src, tgt_emb, attack_type)
     raise ValueError(f'Unsupported attack: {attack_name}')
